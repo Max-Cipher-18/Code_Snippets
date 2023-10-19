@@ -1,0 +1,273 @@
+PROBLEM - 
+I have to implement a Repository Service (ParallelTestControlRepository), which will read from the Mongo database - DB.
+The collection name would be parallelTestControl.
+It will have 3 fields - name, fromProfile, toProfile.
+Could you implement this service using Java 8 and Spring Boot. Don't use Autowiring, I would prefer manual bean wiring for this.
+One more thing, we would be provided a Bean, which would return MongoTemplate object with MongoClient and MongoDBName as argument. So, we can make use of that.
+
+SOLUTION -
+Sure, I can help you implement a Repository Service for reading data from a MongoDB collection using Java 8 and Spring Boot without using autowiring. To do this, you'll need to create a configuration class for the MongoTemplate and then create the ParallelTestControlRepository manually. Here's how you can achieve this:
+
+First, create a configuration class for the MongoTemplate:
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import com.mongodb.client.MongoClient;
+
+@Configuration
+public class MongoTemplateConfig {
+    @Bean
+    public MongoTemplate mongoTemplate(MongoClient mongoClient, String mongoDatabaseName) {
+        return new MongoTemplate(mongoClient, mongoDatabaseName);
+    }
+}
+
+In this configuration class, we create a MongoTemplate bean that is configured with a MongoClient and the MongoDB database name.
+
+Now, create the ParallelTestControlRepository class:
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+
+@Repository
+public class ParallelTestControlRepository {
+    private final MongoTemplate mongoTemplate;
+
+    public ParallelTestControlRepository(MongoTemplate mongoTemplate) {
+        this.mongoTemplate = mongoTemplate;
+    }
+
+    public List<ParallelTestControl> findAll() {
+        Query query = new Query();
+        return mongoTemplate.find(query, ParallelTestControl.class, "parallelTestControl");
+    }
+}
+
+
+In this repository class, we use constructor injection to manually wire the MongoTemplate bean and use it to interact with the MongoDB collection named "parallelTestControl."
+
+Create a ParallelTestControl class to represent the document structure in the MongoDB collection:\
+public class ParallelTestControl {
+    private String name;
+    private String fromProfile;
+    private String toProfile;
+
+    // Getters and setters
+}
+
+Make sure to provide getters and setters for the fields.
+
+Finally, in your Spring Boot application, you can create a main class to run the application and manually configure the MongoClient and MongoDB database name and then use these values when creating the MongoTemplate bean:
+import com.mongodb.client.MongoClient;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+
+@SpringBootApplication
+public class YourApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(YourApplication.class, args);
+    }
+
+    @Bean
+    public MongoClient mongoClient() {
+        // Create and configure your MongoClient here
+        return new MongoClient("localhost", 27017);
+    }
+
+    @Bean
+    public String mongoDatabaseName() {
+        // Provide your MongoDB database name here
+        return "firewalldb";
+    }
+}
+
+Ensure that you configure the MongoClient and specify your MongoDB database name as needed.
+
+With this setup, you can manually create and wire the ParallelTestControlRepository and use it to read data from the "parallelTestControl" collection in your MongoDB database.
+
+==================================================================
+I don't want to annotate the ParallelTestControlRepository with @Repository. 
+
+If you prefer not to annotate the ParallelTestControlRepository with @Repository, you can still create and configure it manually. Here's how you can modify the previous example to achieve that:
+Remove the @Repository annotation from the ParallelTestControlRepository class:
+public class ParallelTestControlRepository {
+    private final MongoTemplate mongoTemplate;
+
+    public ParallelTestControlRepository(MongoTemplate mongoTemplate) {
+        this.mongoTemplate = mongoTemplate;
+    }
+
+    public List<ParallelTestControl> findAll() {
+        Query query = new Query();
+        return mongoTemplate.find(query, ParallelTestControl.class, "parallelTestControl");
+    }
+}
+
+Modify the YourApplication class to create and configure the ParallelTestControlRepository manually:
+import com.mongodb.client.MongoClient;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+import org.springframework.data.mongodb.core.MongoTemplate;
+
+@SpringBootApplication
+public class YourApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(YourApplication.class, args);
+    }
+
+    @Bean
+    public MongoClient mongoClient() {
+        // Create and configure your MongoClient here
+        return new MongoClient("localhost", 27017);
+    }
+
+    @Bean
+    public String mongoDatabaseName() {
+        // Provide your MongoDB database name here
+        return "firewalldb";
+    }
+
+    @Bean
+    public ParallelTestControlRepository parallelTestControlRepository(MongoTemplate mongoTemplate) {
+        return new ParallelTestControlRepository(mongoTemplate);
+    }
+}
+
+In this modified setup, we create a ParallelTestControlRepository bean manually and inject the MongoTemplate bean into it. This allows you to use the ParallelTestControlRepository without the @Repository annotation while still having it properly configured to work with MongoDB.
+
+============================================================================
+Could we write the test cases for it using Mockito and AssertJ Assertions.
+
+Certainly! You can write test cases for your ParallelTestControlRepository using Mockito for mocking dependencies and AssertJ for making assertions. Here's an example of how you can write such test cases:
+import com.mongodb.client.MongoClient;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Query;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.when;
+
+public class ParallelTestControlRepositoryTest {
+
+    private ParallelTestControlRepository parallelTestControlRepository;
+
+    @BeforeEach
+    public void setUp() {
+        // Mock the dependencies
+        MongoTemplate mongoTemplate = Mockito.mock(MongoTemplate.class);
+
+        // Create the repository instance
+        parallelTestControlRepository = new ParallelTestControlRepository(mongoTemplate);
+
+        // Define the expected behavior of the mock
+        List<ParallelTestControl> testData = createTestData();
+        when(mongoTemplate.find(Mockito.any(Query.class), Mockito.eq(ParallelTestControl.class), Mockito.eq("parallelTestControl")))
+                .thenReturn(testData);
+    }
+
+    @Test
+    public void testFindAll() {
+        // Call the method under test
+        List<ParallelTestControl> result = parallelTestControlRepository.findAll();
+
+        // Perform assertions using AssertJ
+        assertThat(result).isNotNull();
+        assertThat(result).hasSize(2); // Adjust the size based on your test data
+        assertThat(result.get(0).getName()).isEqualTo("Test1");
+        assertThat(result.get(1).getFromProfile()).isEqualTo("ProfileA");
+    }
+
+    private List<ParallelTestControl> createTestData() {
+        List<ParallelTestControl> testData = new ArrayList<>();
+        testData.add(new ParallelTestControl("Test1", "ProfileA", "ProfileB"));
+        testData.add(new ParallelTestControl("Test2", "ProfileC", "ProfileD"));
+        return testData;
+    }
+}
+
+In this example, we use Mockito to mock the MongoTemplate and configure its behavior to return a list of test data when mongoTemplate.find is called. We then create an instance of ParallelTestControlRepository and call its findAll method. Finally, we use AssertJ assertions to verify the expected behavior of the repository.
+
+Make sure to adjust the test data and assertions based on your specific requirements and the structure of the ParallelTestControl class.
+
+===================================================================
+Any other test cases, which would cover more
+
+Certainly, in addition to testing the findAll method, you can add more test cases to provide better coverage for your ParallelTestControlRepository. Here are some additional test cases you might consider:
+
+Test a Scenario with No Data:
+@Test
+public void testFindAllNoData() {
+    // Mock the behavior to return an empty list
+    when(mongoTemplate.find(Mockito.any(Query.class), Mockito.eq(ParallelTestControl.class), Mockito.eq("parallelTestControl")))
+            .thenReturn(Collections.emptyList());
+
+    // Call the method under test
+    List<ParallelTestControl> result = parallelTestControlRepository.findAll();
+
+    // Assert that the result is an empty list
+    assertThat(result).isEmpty();
+}
+
+Test Error Handling:
+@Test
+public void testFindAllErrorHandling() {
+    // Mock the behavior to throw an exception (e.g., MongoException)
+    when(mongoTemplate.find(Mockito.any(Query.class), Mockito.eq(ParallelTestControl.class), Mockito.eq("parallelTestControl")))
+            .thenThrow(new MongoException("MongoDB connection error"));
+
+    // Call the method under test
+    // Ensure that it handles the exception gracefully (e.g., returning an empty list or logging the error)
+    List<ParallelTestControl> result = parallelTestControlRepository.findAll();
+
+    // Assert that the result is an empty list or check the error handling behavior
+    // (it depends on how you've implemented error handling in your repository)
+}
+
+==============================================================================
+Could you implement Error Handling and Logging to the Service, to make it Enterprise Grade production ready service.
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+public class ParallelTestControlRepository {
+
+    private final MongoTemplate mongoTemplate;
+    private static final Logger logger = LoggerFactory.getLogger(ParallelTestControlRepository.class);
+
+    public ParallelTestControlRepository(MongoTemplate mongoTemplate) {
+        this.mongoTemplate = mongoTemplate;
+    }
+
+    public List<ParallelTestControl> findAll() {
+        try {
+            Query query = new Query();
+            return mongoTemplate.find(query, ParallelTestControl.class, "parallelTestControl");
+        } catch (DataAccessException e) {
+            // Handle the exception, log it, and return an empty list or throw a custom exception
+            logger.error("An error occurred while fetching data from MongoDB: " + e.getMessage(), e);
+            return Collections.emptyList();
+        }
+    }
+}
+
+
+
