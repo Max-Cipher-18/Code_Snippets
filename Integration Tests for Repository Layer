@@ -1,0 +1,96 @@
+How can we write Integration Tests for this Repository Service using Embedded MongoDB?
+
+To write integration tests for your repository service using an embedded MongoDB, you can use libraries like "EmbeddedMongo" to set up an in-memory MongoDB instance for testing. Here's a step-by-step guide on how to do it:
+
+Add Dependencies:
+
+First, you need to include the required dependencies in your project's pom.xml. Here's an example using the "de.flapdoodle.embed" library, which provides support for embedded MongoDB:
+<dependency>
+    <groupId>de.flapdoodle.embed</groupId>
+    <artifactId>de.flapdoodle.embed.mongo</artifactId>
+    <version>2.2.0</version>
+</dependency>
+<dependency>
+    <groupId>org.springframework.data</groupId>
+    <artifactId>spring-data-mongodb</artifactId>
+    <version>2.5.5</version>
+    <scope>test</scope>
+</dependency>
+
+
+Configure Embedded MongoDB in Your Test Class:
+
+Create a test class that configures and starts an embedded MongoDB instance. You can use the @BeforeAll and @AfterAll annotations for setup and teardown.
+import de.flapdoodle.embed.mongo.MongodExecutable;
+import de.flapdoodle.embed.mongo.MongodStarter;
+import de.flapdoodle.embed.mongo.config.MongodConfig;
+import de.flapdoodle.embed.process.runtime.Network;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+
+public class ParallelTestControlRepositoryIntegrationTest {
+
+    private static MongodExecutable mongodExecutable;
+
+    @BeforeAll
+    public static void setUp() throws Exception {
+        MongodStarter starter = MongodStarter.getDefaultInstance();
+
+        int port = 27017; // Choose a port for the embedded MongoDB
+        mongodExecutable = starter.prepare(MongodConfig.builder()
+                .version(Version.Main.PRODUCTION)
+                .net(new Net(port, Network.localhostIsIPv6()))
+                .build());
+        mongodExecutable.start();
+    }
+
+    @AfterAll
+    public static void tearDown() {
+        if (mongodExecutable != null) {
+            mongodExecutable.stop();
+        }
+    }
+}
+
+
+Write Integration Tests:
+
+With the embedded MongoDB instance running, you can write integration tests for your repository service. In your test methods, configure your MongoTemplate to connect to the embedded MongoDB and set up test data.
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Query;
+import java.util.List;
+
+public class ParallelTestControlRepositoryIntegrationTest {
+
+    private MongoTemplate mongoTemplate;
+    private ParallelTestControlRepository repository;
+
+    @Before
+    public void setUp() {
+        MongoClient mongoClient = MongoClients.create("mongodb://localhost:27017"); // Connect to the embedded MongoDB
+        mongoTemplate = new MongoTemplate(mongoClient, "testdb"); // Create a test database
+        repository = new ParallelTestControlRepository(mongoTemplate);
+    }
+
+    @Test
+    public void testFindAll() {
+        // Insert test data into the embedded MongoDB
+        mongoTemplate.insert(new ParallelTestControl("Test1", "ProfileA", "ProfileB"), "parallelTestControl");
+        mongoTemplate.insert(new ParallelTestControl("Test2", "ProfileC", "ProfileD"), "parallelTestControl");
+
+        // Call the method under test
+        List<ParallelTestControl> result = repository.findAll();
+
+        // Assert that the result is as expected
+        assertThat(result).hasSize(2);
+        assertThat(result.get(0).getName()).isEqualTo("Test1");
+        assertThat(result.get(1).getFromProfile()).isEqualTo("ProfileC");
+    }
+}
+
+
+Run the Integration Tests:
+
+You can run the integration tests using your preferred testing framework (e.g., JUnit) and Maven or Gradle.
+
+This setup allows you to test your repository service with a real MongoDB instance in an isolated and controlled environment. It's crucial to ensure that your tests don't impact your production database while providing a realistic testing environment.
