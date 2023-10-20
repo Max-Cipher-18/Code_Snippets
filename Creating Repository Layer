@@ -371,3 +371,57 @@ public class ParallelTestControlRepositoryTest {
 
 
 These test cases cover scenarios where the findByName method finds a document by name and when it doesn't find a document, ensuring that it returns an Optional correctly.
+
+======================================================================
+Could you add logging and exception handling to the code as well?
+
+Certainly! Adding logging and exception handling is a good practice for robust error handling and debugging. Here's the modified code with logging and exception handling added:
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
+
+@Repository
+public class ParallelTestControlRepository {
+    private static final Logger logger = LoggerFactory.getLogger(ParallelTestControlRepository.class);
+
+    private final MongoTemplate mongoTemplate;
+
+    public ParallelTestControlRepository(MongoTemplate mongoTemplate) {
+        this.mongoTemplate = mongoTemplate;
+    }
+
+    public List<ParallelTestControl> findAll() {
+        try {
+            Query query = new Query();
+            return mongoTemplate.find(query, ParallelTestControl.class, "parallelTestControl");
+        } catch (DataAccessException e) {
+            logger.error("Error occurred while retrieving data from MongoDB: " + e.getMessage());
+            throw new RuntimeException("Failed to retrieve data from MongoDB", e);
+        }
+    }
+
+    public Optional<ParallelTestControl> findByName(String name) {
+        try {
+            Query query = new Query(Criteria.where("name").is(name));
+            ParallelTestControl result = mongoTemplate.findOne(query, ParallelTestControl.class, "parallelTestControl");
+            return Optional.ofNullable(result);
+        } catch (DataAccessException e) {
+            logger.error("Error occurred while querying MongoDB for name: " + name + ". " + e.getMessage());
+            throw new RuntimeException("Failed to query MongoDB for name: " + name, e);
+        }
+    }
+}
+
+In this updated code:
+
+We added logging using SLF4J (LoggerFactory.getLogger) to log errors and important events.
+We wrapped the database operations in try-catch blocks to handle potential DataAccessExceptions. If an exception occurs, it's logged, and a custom RuntimeException is thrown with an error message.
+The error messages include information about what operation caused the error for easier debugging.
+This error handling and logging will make your code more robust and help you identify issues when they occur.
