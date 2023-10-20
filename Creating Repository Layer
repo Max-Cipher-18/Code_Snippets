@@ -270,4 +270,104 @@ public class ParallelTestControlRepository {
 }
 
 
+=================================================================
+Oops. We forgot to add findByName(String name) method in Repository, it's signature would be 
+Optional<ParallelTestControl> findByName(String name);
+Could you implement it as well?
 
+Certainly! You can add the findByName method to your ParallelTestControlRepository to query a document by its name and return it wrapped in an Optional. Here's how you can implement it:
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
+
+@Repository
+public class ParallelTestControlRepository {
+    private final MongoTemplate mongoTemplate;
+
+    public ParallelTestControlRepository(MongoTemplate mongoTemplate) {
+        this.mongoTemplate = mongoTemplate;
+    }
+
+    public List<ParallelTestControl> findAll() {
+        Query query = new Query();
+        return mongoTemplate.find(query, ParallelTestControl.class, "parallelTestControl");
+    }
+
+    public Optional<ParallelTestControl> findByName(String name) {
+        Query query = new Query(Criteria.where("name").is(name));
+        ParallelTestControl result = mongoTemplate.findOne(query, ParallelTestControl.class, "parallelTestControl");
+        return Optional.ofNullable(result);
+    }
+}
+
+
+With this findByName method, you can now search for a document by name and return it as an Optional. If no document with the given name is found, the Optional will be empty.
+
+=============================================================
+Could you add test cases to test this method as well, just like we did for others?
+
+Certainly! Here are some test cases to cover the findByName method in your ParallelTestControlRepository:
+import com.mongodb.client.MongoClient;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Query;
+
+import java.util.Collections;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.when;
+
+public class ParallelTestControlRepositoryTest {
+
+    private ParallelTestControlRepository parallelTestControlRepository;
+
+    @BeforeEach
+    public void setUp() {
+        // Mock the dependencies
+        MongoTemplate mongoTemplate = Mockito.mock(MongoTemplate.class);
+
+        // Create the repository instance
+        parallelTestControlRepository = new ParallelTestControlRepository(mongoTemplate);
+
+        // Define the expected behavior of the mock
+        when(mongoTemplate.find(Mockito.any(Query.class), Mockito.eq(ParallelTestControl.class), Mockito.eq("parallelTestControl")))
+                .thenReturn(createTestData());
+    }
+
+    @Test
+    public void testFindByName() {
+        // Mock the behavior to return a document with the specified name
+        when(mongoTemplate.findOne(Mockito.any(Query.class), Mockito.eq(ParallelTestControl.class), Mockito.eq("parallelTestControl")))
+                .thenReturn(createTestData().get(0));
+
+        // Call the method under test
+        Optional<ParallelTestControl> result = parallelTestControlRepository.findByName("Test1");
+
+        // Assert that the result contains the expected data
+        assertThat(result).isPresent();
+        assertThat(result.get().getName()).isEqualTo("Test1");
+    }
+
+    @Test
+    public void testFindByNameNotFound() {
+        // Mock the behavior to return null, indicating that the document is not found
+        when(mongoTemplate.findOne(Mockito.any(Query.class), Mockito.eq(ParallelTestControl.class), Mockito.eq("parallelTestControl")))
+                .thenReturn(null);
+
+        // Call the method under test
+        Optional<ParallelTestControl> result = parallelTestControlRepository.findByName("NonExistentName");
+
+        // Assert that the result is empty
+        assertThat(result).isEmpty();
+    }
+    
+    // Rest of the test cases (findAll, error handling, etc.) remain the same as previously provided
+}
+
+
+These test cases cover scenarios where the findByName method finds a document by name and when it doesn't find a document, ensuring that it returns an Optional correctly.
