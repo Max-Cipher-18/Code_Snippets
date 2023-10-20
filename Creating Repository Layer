@@ -1,5 +1,5 @@
 PROBLEM - 
-I have to implement a Repository Service (ParallelTestControlRepository), which will read from the Mongo database - DB.
+I have to implement a Repository Service (ParallelTestControlRepository), which will read from the Mongo database - DB. 
 The collection name would be parallelTestControl.
 It will have 3 fields - name, fromProfile, toProfile.
 Could you implement this service using Java 8 and Spring Boot. Don't use Autowiring, I would prefer manual bean wiring for this.
