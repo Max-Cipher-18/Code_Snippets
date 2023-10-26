@@ -1,0 +1,166 @@
+class TestConnectivityObject{
+	private String srcHost;
+	private String destHost;
+	private String destPort;
+
+	// Constructors & Getter
+	// Equals and HashCode
+	// ToString methods
+}
+
+class Result{
+	String sourceEntityType;
+	String sourceEntityValue;
+	String sourceEntityIP;
+	String destinationUrl;
+	String destinationIP;
+	String destinationPort;
+	String networkbotResult;
+	boolean requiresLegacyTicket;
+	String tcpTestResult;
+	String parallelTestResult;
+	Date lastTestTime;
+	String tmdOrder;
+	String starTicket;
+	Date eta;
+	Date executionDate;
+	
+	// Constructors & Getter
+	// Equals and HashCode
+	// ToString methods
+}
+
+=====================================================================================================================
+class TestResultsMongoRepository {
+	private final MongoOperations mongoOperations;
+	
+	public TestResultsMongoRepository (MongoOperations mongoOperations){
+		this.mongoOperations = mongoOperations;
+	}
+
+	public void saveAll(Collection<Result> objectsToSave){
+		BulkOperations bulkOps = mongoOperations.bulkOps(BulkMode.UNORDERED, Result.class);
+		
+		for (Result dbo : objectsToSave) {
+			bulkOps.insert(dbo);
+		}
+		BulkWriteResult bulkWriteResult = bulkOps.execute();
+	}
+}
+
+=====================================================================================================================
+class TestResultsUpdateService{
+
+	private final TestResultsMongoRepository testResultsMongoRepository;
+	private final int writeBatchSize;
+	
+	public TestResultsUpdateService(TestResultsMongoRepository testResultsMongoRepository, int writeBatchSize){
+		this.testResultsMongoRepository = testResultsMongoRepository;
+		this.writeBatchSize = writeBatchSize;
+	}
+
+	public void saveTestResults(Map<TestConnectivityObject, Result> resultMap){
+		List<Result> testResultDBOList = new LinkedList<>();
+
+		for (Map.Entry<TestConnectivityObject, Result> resultEntry : resultMap.entrySet()){
+			Result result = resultEntry.getValue();
+			
+			testResultDBOList.add(result);	
+		}
+
+		for (int start = 0; start < testResultDBOList.size(); start += writeBatchSize){
+			int end = min(testResultDBOList.size(), start + writeBatchSize);
+			testResultsMongoRepository.saveAll(testResultDBOList.subList(start, end));
+		}	
+	}
+}
+
+============================================================================================
+Certainly, here's the complete code for an integration test for the TestResultsUpdateService class using AssertJ assertions and a BDD-style approach. Please remember to adjust the test data and verification logic according to your application's specific requirements:
+
+import de.flapdoodle.embed.mongo.MongodExecutable;
+import de.flapdoodle.embed.mongo.MongodStarter;
+import de.flapdoodle.embed.mongo.config.MongodConfig;
+import de.flapdoodle.embed.mongo.distribution.Version;
+import de.flapdoodle.embed.process.runtime.Network;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+import org.springframework.data.mongodb.core.MongoTemplate;
+
+import java.util.HashMap;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+
+public class TestResultsUpdateServiceIntegrationTest {
+
+    private MongodExecutable mongodExecutable;
+    private TestResultsUpdateService testResultsUpdateService;
+    private MongoTemplate mongoTemplate;
+
+    @Before
+    public void setUp() throws Exception {
+        // Configure and start the embedded MongoDB server
+        MongodStarter starter = MongodStarter.getDefaultInstance();
+        int port = 27017; // The port for MongoDB
+        mongodExecutable = starter.prepare(
+            MongodConfig.builder()
+                .version(Version.Main.PRODUCTION)
+                .net(new Net(port, Network.localhostIsIPv6()))
+                .build());
+        mongodExecutable.start();
+
+        // Create a MongoTemplate for the test MongoDB database
+        mongoTemplate = new MongoTemplate(new SimpleMongoClientDatabaseFactory("mongodb://localhost:" + port + "/test"));
+
+        // Initialize the TestResultsMongoRepository with a mock (you can use an actual repository)
+        TestResultsMongoRepository testResultsMongoRepository = mock(TestResultsMongoRepository.class);
+
+        // Initialize the TestResultsUpdateService
+        int writeBatchSize = 10; // Adjust as needed
+        testResultsUpdateService = new TestResultsUpdateService(testResultsMongoRepository, writeBatchSize);
+
+        // Insert some test data into the embedded MongoDB for the test
+        // For example, insert test documents in the "testResults" collection
+        // You can use the mongoTemplate to perform the insertion
+    }
+
+    @After
+    public void tearDown() {
+        // Stop the embedded MongoDB server
+        mongodExecutable.stop();
+    }
+
+    @Test
+    public void shouldSaveTestResultsInMongoDB() {
+        // Given a sample map of TestConnectivityObject and Result
+        Map<TestConnectivityObject, Result> resultMap = new HashMap<>();
+
+        // Create a TestConnectivityObject and a Result
+        TestConnectivityObject testConnectivityObject = new TestConnectivityObject();
+        testConnectivityObject.setSrcHost("localhost");
+        testConnectivityObject.setDestHost("example.com");
+        testConnectivityObject.setDestPort("80");
+
+        Result result = new Result();
+        result.setSourceEntityType("TestEntity");
+        result.setSourceEntityValue("TestValue");
+        // Set other fields in the Result object as needed
+
+        // Add the test case to the resultMap
+        resultMap.put(testConnectivityObject, result);
+
+        // When saving the test results
+        testResultsUpdateService.saveTestResults(resultMap);
+
+        // Then verify that the data is correctly saved in the embedded MongoDB
+        // Use AssertJ assertions to make the verification more readable
+        assertThat(mongoTemplate.findAll(Result.class)).isNotEmpty();
+    }
+}
+
+In this code, we follow a BDD-style approach with a clear separation of Given, When, and Then sections, making the test more readable and expressive. The assertThat statement from AssertJ is used for verification.
+
+You should adapt this code to your specific application requirements, modify the test data, and adjust the verification logic as needed.
