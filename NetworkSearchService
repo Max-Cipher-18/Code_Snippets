@@ -133,7 +133,19 @@ public class NetworkPathSearchService {
         String apiUrl = "https://prod.ui.fwdroumil.com/api/snapshots/{snapshotId}/paths";
 
         // Create a URI using the RestTemplate's UriComponentsBuilder
-        // (as shown in the previous response)
+        UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(apiUrl)
+            .queryParam("srcIp", request.getSourceIp())
+            .queryParam("dstIp", request.getDestinationIp())
+            .queryParam("intent", snapshotData.getIntent())
+            .queryParam("ipProto", snapshotData.getIpProto())
+            .queryParam("dstPort", request.getDestinationPort())
+            .queryParam("includeNetworkFunctions", snapshotData.getIncludeNetworkFunctions())
+            .queryParam("maxCandidates", snapshotData.getMaxCandidates())
+            .queryParam("maxResults", snapshotData.getMaxResults())
+            .queryParam("maxReturnPathResults", snapshotData.getMaxReturnPathResults())
+            .queryParam("maxSeconds", snapshotData.getMaxSeconds());
+
+        URI uri = builder.buildAndExpand(snapshotId).toUri();
 
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", authorizationHeader);
