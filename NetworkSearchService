@@ -1,0 +1,293 @@
+1. AuthenticationUtility:
+Create a class called AuthenticationUtility that reads the username and password from environment variables.
+Concatenate the username and password in the format username:password.
+Encode this concatenated string using Base64.
+Provide a method in this class to retrieve the Base64-encoded value, which can be used as the Authorization header.
+Here's a simplified example of the AuthenticationUtility class:
+
+public class AuthenticationUtility {
+    public String generateAuthorizationHeader() {
+        String username = System.getenv("USERNAME_ENV_VAR");
+        String password = System.getenv("PASSWORD_ENV_VAR");
+        String credentials = username + ":" + password;
+        String base64Credentials = Base64.getEncoder().encodeToString(credentials.getBytes());
+        return "Basic " + base64Credentials;
+    }
+}
+
+2. GetLatestSnapshotUtility:
+Create a class called GetLatestSnapshotUtility to interact with the third-party service and retrieve the latest snapshot.
+Parse the JSON response from the third-party service to extract the relevant data.
+Cache the snapshot data, possibly using a caching library like Ehcache or Redis.
+Here's a simplified example of the GetLatestSnapshotUtility class:
+
+public class GetLatestSnapshotUtility {
+    public SnapshotData getLatestSnapshot() {
+        // Make HTTP request to the third-party service to get the latest snapshot.
+        // Parse the JSON response and return the relevant data.
+    }
+}
+
+3. NetworkPathSearchService:
+Create a service class called NetworkPathSearchService that encapsulates the logic for making requests to the third-party service.
+Use the AuthenticationUtility to generate the Authorization header and set it as a request header when calling the third-party API.
+Use the GetLatestSnapshotUtility to retrieve the cached snapshot data or request a new snapshot.
+Call the third-party service with the appropriate headers and data from the snapshot.
+Here's a simplified example of the NetworkPathSearchService class:
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import org.springframework.stereotype.Service;
+
+@Service
+public class NetworkPathSearchService {
+    private AuthenticationUtility authUtility;
+    private GetLatestSnapshotUtility snapshotUtility;
+    private RestTemplate restTemplate;
+
+    public NetworkPathSearchService(
+        AuthenticationUtility authUtility,
+        GetLatestSnapshotUtility snapshotUtility,
+        RestTemplate restTemplate
+    ) {
+        this.authUtility = authUtility;
+        this.snapshotUtility = snapshotUtility;
+        this.restTemplate = restTemplate;
+    }
+
+    public ApiResponse searchNetworkPath(NetworkRequest request, String snapshotId) {
+        // Generate the Authorization header
+        String authorizationHeader = authUtility.generateAuthorizationHeader();
+
+        // Get the latest snapshot data
+        SnapshotData snapshotData = snapshotUtility.getLatestSnapshot();
+
+        // Prepare the URL with placeholders for variables
+        String apiUrl = "https://prod.ui.fwdroumil.com/api/snapshots/{snapshotId}/paths";
+
+        // Create a URI using the RestTemplate's UriComponentsBuilder
+        // (as shown in the previous response)
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", authorizationHeader);
+
+        // Make the HTTP request
+        ResponseEntity<String> response = restTemplate.exchange(
+            uri,
+            HttpMethod.GET,
+            new HttpEntity<>(headers),
+            String.class
+        );
+
+        // Parse the JSON response using Jackson streaming API
+        String jsonResponse = response.getBody();
+        try {
+            JsonFactory jsonFactory = new JsonFactory();
+            JsonParser jsonParser = jsonFactory.createParser(jsonResponse);
+
+            String forwardingOutcome = null;
+            String securityOutcome = null;
+
+            while (jsonParser.nextToken() != null) {
+                String fieldName = jsonParser.getCurrentName();
+                if ("forwardingOutcome".equals(fieldName)) {
+                    jsonParser.nextToken(); // Move to the field's value
+                    forwardingOutcome = jsonParser.getText();
+                } else if ("securityOutcome".equals(fieldName)) {
+                    jsonParser.nextToken(); // Move to the field's value
+                    securityOutcome = jsonParser.getText();
+                }
+            }
+
+            ApiResponse apiResponse = new ApiResponse();
+            apiResponse.setForwardingOutcome(forwardingOutcome);
+            apiResponse.setSecurityOutcome(securityOutcome);
+
+            return apiResponse;
+        } catch (IOException e) {
+            // Handle any exceptions that may occur during JSON parsing
+            e.printStackTrace();
+            return null; // Or return an appropriate error response
+        }
+    }
+}
+
+In this code:
+
+We use Jackson's streaming API to iterate through the JSON response and extract specific field values (forwardingOutcome and securityOutcome).
+We create a JsonFactory and JsonParser to navigate through the JSON content.
+We extract the values of "forwardingOutcome" and "securityOutcome" as strings.
+We create an ApiResponse object and set the extracted values before returning it.
+Make sure to handle exceptions appropriately in case of JSON parsing errors. Additionally, ensure that the ApiResponse class has setters for the "forwardingOutcome" and "securityOutcome" fields.
+
+================================================================================================
+
+Certainly, here's the complete code for your LatestNetworkSnapshotService with externalized API URL, dynamic networkId, and the getAuthorizationHeader method included:
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.web.util.UriComponentsBuilder;
+
+import java.time.LocalDateTime;
+import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
+
+@Service
+public class LatestNetworkSnapshotService {
+    private Map<LocalDateTime, String> snapshotCache = new HashMap<>();
+    private static final long MAX_CACHE_TIME_HOURS = 23;
+
+    @Value("${your.networkId}")
+    private String networkId;
+
+    @Value("${your.authorizationToken}")
+    private String authorizationToken;
+
+    @Value("${api.url}")
+    private String apiUrl; // Read API URL from properties
+
+    private final RestTemplate restTemplate;
+
+    public LatestNetworkSnapshotService(RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
+    }
+
+    public String getLatestNetworkSnapshot() {
+        LocalDateTime currentTimestamp = LocalDateTime.now();
+
+        // Check if there's an entry in the cache
+        if (!snapshotCache.isEmpty()) {
+            Map.Entry<LocalDateTime, String> cacheEntry = snapshotCache.entrySet().iterator().next();
+            LocalDateTime entryTimestamp = cacheEntry.getKey();
+
+            Duration duration = Duration.between(entryTimestamp, currentTimestamp);
+            long hoursSinceEntry = duration.toHours();
+
+            if (hoursSinceEntry <= MAX_CACHE_TIME_HOURS) {
+                return cacheEntry.getValue();
+            }
+        }
+
+        // If the cache entry is not valid, call the third-party API with the Authorization Header
+        String authorizationHeader = getAuthorizationHeader();
+        String latestSnapshotId = callThirdPartyAPI(authorizationHeader);
+
+        // Remove the existing entry and store the new entry with the current timestamp
+        snapshotCache.clear();
+        snapshotCache.put(LocalDateTime.now(), latestSnapshotId);
+
+        return latestSnapshotId;
+    }
+
+    private String getAuthorizationHeader() {
+        // Implement your logic to obtain the authorization header
+        return "Bearer " + authorizationToken;
+    }
+
+    private String callThirdPartyAPI(String authorizationHeader) {
+        // Build the URL with the dynamic networkId
+        UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(apiUrl)
+            .queryParam("networkId", networkId); // Add query parameter for networkId
+
+        // Set the Authorization Header
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", authorizationHeader);
+        HttpEntity<String> entity = new HttpEntity<>(headers);
+
+        // Build the URL
+        String apiUrlWithNetworkId = builder.toUriString();
+
+        // Make the GET request to the ThirdPartyAPI
+        ResponseEntity<String> responseEntity = restTemplate.exchange(apiUrlWithNetworkId, HttpMethod.GET, entity, String.class);
+        String response = responseEntity.getBody();
+
+        return response;
+    }
+}
+
+This code externalizes the API URL, uses dynamic networkId, and includes the getAuthorizationHeader method to obtain the Authorization Header, allowing you to make a GET request to the ThirdPartyAPI with the necessary configuration.
+
+
+================================================================================================================
+
+I understand your updated requirement now. You want to stop parsing the JSON as soon as you find both "forwardingOutcome" and "securityOutcome" fields. If neither of them is found, you should continue parsing to get the "timeOut" field value. Here's the updated code to achieve this:
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+
+import java.io.IOException;
+import java.io.StringReader;
+
+public class JsonDataExtractor {
+    public static void main(String[] args) throws IOException {
+        String jsonData = "{\n" +
+                "  \"srcIpLocationType\":  \"HOST\",\n" +
+                "  \"dstIpLocationType\":  \"HOST\",\n" +
+                "  \"info\":  {\n" +
+                "          \"paths\":   [\n" +
+                "               {\n" +
+                "                    \"forwardingOutcome\" :   \"DELIVERED\",\n" +
+                "                    \"securityOutcome\" :   \"DELIVERED\",\n" +
+                "                    \"hops\":  \"test\"\n" +
+                "                }\n" +
+                "             ],\n" +
+                "         \"totalHits\": {\n" +
+                "                         \"value\": 32,\n" +
+                "                        \"type\": \"EXACT\"\n" +
+                "          }\n" +
+                "    },\n" +
+                "\"timeOut\": false,\n" +
+                "\"queryUrl\": \"https://test.com\"\n" +
+                "}";
+        
+        String forwardingOutcome = null;
+        String securityOutcome = null;
+        boolean foundTimeOut = false;
+        
+        // Create a JSON parser
+        JsonFactory factory = new JsonFactory();
+        JsonParser parser = factory.createParser(new StringReader(jsonData));
+        
+        while (parser.nextToken() != null) {
+            if ("forwardingOutcome".equals(parser.getCurrentName())) {
+                parser.nextToken();
+                forwardingOutcome = parser.getText();
+            } else if ("securityOutcome".equals(parser.getCurrentName())) {
+                parser.nextToken();
+                securityOutcome = parser.getText();
+            }
+            
+            if (forwardingOutcome != null && securityOutcome != null) {
+                // Both "forwardingOutcome" and "securityOutcome" found, stop parsing
+                break;
+            }
+            
+            if ("timeOut".equals(parser.getCurrentName())) {
+                parser.nextToken();
+                foundTimeOut = true;
+            }
+        }
+        
+        if (forwardingOutcome != null && securityOutcome != null) {
+            System.out.println("forwardingOutcome: " + forwardingOutcome);
+            System.out.println("securityOutcome: " + securityOutcome);
+        } else if (foundTimeOut) {
+            System.out.println("Extracted timeOut: true");
+        } else {
+            System.out.println("Neither forwardingOutcome nor securityOutcome found, and timeOut is not present.");
+        }
+        
+        // Close the parser
+        parser.close();
+    }
+}
+
+===================================================================================================================================
