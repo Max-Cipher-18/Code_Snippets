@@ -476,3 +476,24 @@ public class NetworkSearchControllerTest {
         assertThat(response.getBody()).isEqualTo("ID Not Found");
     }
 }
+
+======================================================================================================================
+import nl.jqno.equalsverifier.EqualsVerifier;
+import nl.jqno.equalsverifier.Warning;
+import nl.jqno.equalsverifier.api.EqualsVerifierApi;
+
+public class NetworkRequestTest {
+
+    @Test
+    public void testEqualsContract() {
+        EqualsVerifier.forClass(NetworkRequest.class)
+                .suppress(Warning.NONFINAL_FIELDS)  // Suppress non-final fields warning, if applicable
+                .verify();
+    }
+
+    @Test
+    public void testToStringMethod() {
+        ToStringVerifier.forClass(NetworkRequest.class)
+                .verify();
+    }
+}
