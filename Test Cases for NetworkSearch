@@ -1,0 +1,478 @@
+Thank you for providing the NetworkSearchController. Now, let's write some test cases for this controller. We'll focus on testing the behavior of the searchNetworkPath endpoint.
+
+Test Cases for NetworkSearchController
+import org.junit.jupiter.api.Test;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+
+import java.io.IOException;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.*;
+
+public class NetworkSearchControllerTest {
+
+    @Mock
+    private NetworkPathSearchService networkPathSearchService;
+
+    @InjectMocks
+    private NetworkSearchController networkSearchController;
+
+    public NetworkSearchControllerTest() {
+        MockitoAnnotations.openMocks(this);
+    }
+
+    @Test
+    public void testSearchNetworkPath_Success() throws IOException, LatestSnapshotIdNotFoundException {
+        // Arrange
+        when(networkPathSearchService.searchNetworkPath(any())).thenReturn("SUCCESS");
+
+        // Act
+        ResponseEntity<String> response = networkSearchController.searchNetworkPath("sourceIp", "destIp", 8080, "TCP");
+
+        // Assert
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isEqualTo("SUCCESS");
+
+        // Verify that the service method was called
+        verify(networkPathSearchService, times(1)).searchNetworkPath(any());
+    }
+
+    @Test
+    public void testSearchNetworkPath_InternalServerErrorOnIOException() throws IOException, LatestSnapshotIdNotFoundException {
+        // Arrange
+        when(networkPathSearchService.searchNetworkPath(any())).thenThrow(new IOException("IO Exception"));
+
+        // Act
+        ResponseEntity<String> response = networkSearchController.searchNetworkPath("sourceIp", "destIp", 8080, "TCP");
+
+        // Assert
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(response.getBody()).isEqualTo("Error occurred while parsing json");
+
+        // Verify that the service method was called
+        verify(networkPathSearchService, times(1)).searchNetworkPath(any());
+    }
+
+    @Test
+    public void testSearchNetworkPath_InternalServerErrorOnIdNotFoundException() throws IOException, LatestSnapshotIdNotFoundException {
+        // Arrange
+        when(networkPathSearchService.searchNetworkPath(any())).thenThrow(new LatestSnapshotIdNotFoundException("ID Not Found"));
+
+        // Act
+        ResponseEntity<String> response = networkSearchController.searchNetworkPath("sourceIp", "destIp", 8080, "TCP");
+
+        // Assert
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(response.getBody()).isEqualTo("ID Not Found");
+
+        // Verify that the service method was called
+        verify(networkPathSearchService, times(1)).searchNetworkPath(any());
+    }
+}
+
+These test cases cover scenarios where the service returns a success result, an IOException, and a LatestSnapshotIdNotFoundException. Make sure to adjust the test cases based on the specific behavior you expect and any additional edge cases you want to cover.
+
+======================================================================================
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+public class AuthorizationHeaderUtilityTest {
+
+    @Test
+    public void generateAuthorizationHeader_GivenValidCredentials_WhenCalled_ThenReturnAuthorizationHeader() {
+        // Given
+        AuthorizationHeaderUtility authUtility = new AuthorizationHeaderUtility();
+        System.setProperty("USERNAME_ENV_VAR", "testUser");
+        System.setProperty("PASSWORD_ENV_VAR", "testPassword");
+
+        // When
+        String authorizationHeader = authUtility.generateAuthorizationHeader();
+
+        // Then
+        assertThat(authorizationHeader)
+                .isNotNull()
+                .startsWith("Basic ")
+                .doesNotContain("testUser:testPassword"); // Ensure the actual credentials are not exposed
+    }
+
+    @Test
+    public void generateAuthorizationHeader_GivenMissingUsername_WhenCalled_ThenThrowException() {
+        // Given
+        AuthorizationHeaderUtility authUtility = new AuthorizationHeaderUtility();
+        System.clearProperty("USERNAME_ENV_VAR");
+        System.setProperty("PASSWORD_ENV_VAR", "testPassword");
+
+        // When, Then
+        assertThatThrownBy(authUtility::generateAuthorizationHeader)
+                .isInstanceOf(NullPointerException.class)
+                .hasMessageContaining("Username environment variable is not set");
+    }
+
+    @Test
+    public void generateAuthorizationHeader_GivenMissingPassword_WhenCalled_ThenThrowException() {
+        // Given
+        AuthorizationHeaderUtility authUtility = new AuthorizationHeaderUtility();
+        System.setProperty("USERNAME_ENV_VAR", "testUser");
+        System.clearProperty("PASSWORD_ENV_VAR");
+
+        // When, Then
+        assertThatThrownBy(authUtility::generateAuthorizationHeader)
+                .isInstanceOf(NullPointerException.class)
+                .hasMessageContaining("Password environment variable is not set");
+    }
+
+    @Test
+    public void generateAuthorizationHeader_GivenEmptyUsername_WhenCalled_ThenThrowException() {
+        // Given
+        AuthorizationHeaderUtility authUtility = new AuthorizationHeaderUtility();
+        System.setProperty("USERNAME_ENV_VAR", "");
+        System.setProperty("PASSWORD_ENV_VAR", "testPassword");
+
+        // When, Then
+        assertThatThrownBy(authUtility::generateAuthorizationHeader)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Username is empty");
+    }
+
+    @Test
+    public void generateAuthorizationHeader_GivenEmptyPassword_WhenCalled_ThenThrowException() {
+        // Given
+        AuthorizationHeaderUtility authUtility = new AuthorizationHeaderUtility();
+        System.setProperty("USERNAME_ENV_VAR", "testUser");
+        System.setProperty("PASSWORD_ENV_VAR", "");
+
+        // When, Then
+        assertThatThrownBy(authUtility::generateAuthorizationHeader)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Password is empty");
+    }
+}
+
+
+==================================================================================================================
+Certainly! Let's write detailed test cases for the LatestNetworkSnapshotService class using the Given, When, Then style.
+
+import org.junit.jupiter.api.Test;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.RestTemplate;
+
+import java.io.IOException;
+import java.net.URI;
+import java.time.LocalDateTime;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
+public class LatestNetworkSnapshotServiceTest {
+
+    @Mock
+    private RestTemplate restTemplate;
+
+    @InjectMocks
+    private LatestNetworkSnapshotService snapshotService;
+
+    public LatestNetworkSnapshotServiceTest() {
+        MockitoAnnotations.openMocks(this);
+    }
+
+    @Test
+    public void getLatestNetworkSnapshot_GivenCachedSnapshot_WhenCalled_ThenReturnCachedSnapshot() throws IOException, LatestSnapshotIdNotFoundException {
+        // Given
+        LocalDateTime now = LocalDateTime.now();
+        snapshotService.snapshotCache.put(now.minusHours(1), "cachedSnapshotId");
+
+        // When
+        String result = snapshotService.getLatestNetworkSnapshot("authorizationHeader");
+
+        // Then
+        assertThat(result).isEqualTo("cachedSnapshotId");
+    }
+
+    @Test
+    public void getLatestNetworkSnapshot_GivenNoCachedSnapshot_WhenApiCallSucceeds_ThenReturnNewSnapshot() throws IOException, LatestSnapshotIdNotFoundException {
+        // Given
+        when(snapshotService.invokeApiAndGetSnapshotId(any())).thenReturn(Optional.of("newSnapshotId"));
+
+        // When
+        String result = snapshotService.getLatestNetworkSnapshot("authorizationHeader");
+
+        // Then
+        assertThat(result).isEqualTo("newSnapshotId");
+        verify(snapshotService.snapshotCache, times(1)).clear();
+        verify(snapshotService.snapshotCache, times(1)).put(any(), eq("newSnapshotId"));
+    }
+
+    @Test
+    public void getLatestNetworkSnapshot_GivenNoCachedSnapshot_WhenApiCallFails_ThenThrowException() throws IOException {
+        // Given
+        when(snapshotService.invokeApiAndGetSnapshotId(any())).thenReturn(Optional.empty());
+
+        // When, Then
+        assertThatThrownBy(() -> snapshotService.getLatestNetworkSnapshot("authorizationHeader"))
+                .isInstanceOf(LatestSnapshotIdNotFoundException.class)
+                .hasMessageContaining("Latest Processed Snapshot Id not found.");
+    }
+
+    @Test
+    public void invokeApiAndGetSnapshotId_WhenApiCallSucceeds_ThenReturnSnapshotId() throws IOException {
+        // Given
+        URI uri = URI.create("http://example.com/api");
+        when(restTemplate.exchange(eq(uri), eq(HttpMethod.GET), any(), eq(String.class)))
+                .thenReturn(new ResponseEntity<>("{\"id\":\"apiSnapshotId\"}", HttpStatus.OK));
+
+        // When
+        Optional<String> result = snapshotService.invokeApiAndGetSnapshotId("authorizationHeader");
+
+        // Then
+        assertThat(result).isPresent().contains("apiSnapshotId");
+    }
+
+    @Test
+    public void invokeApiAndGetSnapshotId_WhenApiCallFails_ThenReturnEmpty() throws IOException {
+        // Given
+        URI uri = URI.create("http://example.com/api");
+        when(restTemplate.exchange(eq(uri), eq(HttpMethod.GET), any(), eq(String.class)))
+                .thenReturn(new ResponseEntity<>(HttpStatus.NOT_FOUND));
+
+        // When
+        Optional<String> result = snapshotService.invokeApiAndGetSnapshotId("authorizationHeader");
+
+        // Then
+        assertThat(result).isEmpty();
+    }
+}
+
+These test cases cover scenarios where the snapshot is retrieved from the cache, fetched from the API, and API calls succeed or fail. Adjust the test cases based on your specific requirements and error messages.
+
+=================================================================================================================
+Certainly! Let's write detailed test cases for the NetworkPathSearchService class using the Given, When, Then style.
+
+import org.junit.jupiter.api.Test;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.RestTemplate;
+
+import java.io.IOException;
+import java.net.URI;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
+public class NetworkPathSearchServiceTest {
+
+    @Mock
+    private AuthorizationHeaderUtility authUtility;
+
+    @Mock
+    private LatestNetworkSnapshotService snapshotService;
+
+    @Mock
+    private RestTemplate restTemplate;
+
+    @InjectMocks
+    private NetworkPathSearchService pathSearchService;
+
+    public NetworkPathSearchServiceTest() {
+        MockitoAnnotations.openMocks(this);
+    }
+
+    @Test
+    public void searchNetworkPath_GivenValidRequest_WhenApiCallSucceeds_ThenReturnResult() throws IOException, LatestSnapshotIdNotFoundException {
+        // Given
+        NetworkRequest request = new NetworkRequest();
+        when(authUtility.generateAuthorizationHeader()).thenReturn("authHeader");
+        when(snapshotService.getLatestNetworkSnapshot(any())).thenReturn("snapshotId");
+        when(restTemplate.exchange(any(), eq(HttpMethod.GET), any(), eq(String.class)))
+                .thenReturn(new ResponseEntity<>("{\"forwardingOutcome\":\"DELIVERED\",\"securityOutcome\":\"PERMITTED\"}", HttpStatus.OK));
+
+        // When
+        String result = pathSearchService.searchNetworkPath(request);
+
+        // Then
+        assertThat(result).isEqualTo(NetworkPathSearchService.ResultCategory.SUCCESS.name());
+    }
+
+    @Test
+    public void searchNetworkPath_GivenApiCallFails_ThenReturnUnknownResult() throws IOException, LatestSnapshotIdNotFoundException {
+        // Given
+        NetworkRequest request = new NetworkRequest();
+        when(authUtility.generateAuthorizationHeader()).thenReturn("authHeader");
+        when(snapshotService.getLatestNetworkSnapshot(any())).thenReturn("snapshotId");
+        when(restTemplate.exchange(any(), eq(HttpMethod.GET), any(), eq(String.class)))
+                .thenReturn(new ResponseEntity<>(HttpStatus.NOT_FOUND));
+
+        // When
+        String result = pathSearchService.searchNetworkPath(request);
+
+        // Then
+        assertThat(result).isEqualTo(NetworkPathSearchService.ResultCategory.UNKNOWN.name());
+    }
+
+    @Test
+    public void searchNetworkPath_GivenPermittedSecurityOutcome_ThenReturnSuccessResult() throws IOException, LatestSnapshotIdNotFoundException {
+        // Given
+        NetworkRequest request = new NetworkRequest();
+        when(authUtility.generateAuthorizationHeader()).thenReturn("authHeader");
+        when(snapshotService.getLatestNetworkSnapshot(any())).thenReturn("snapshotId");
+        when(restTemplate.exchange(any(), eq(HttpMethod.GET), any(), eq(String.class)))
+                .thenReturn(new ResponseEntity<>("{\"forwardingOutcome\":\"DELIVERED\",\"securityOutcome\":\"PERMITTED\"}", HttpStatus.OK));
+
+        // When
+        String result = pathSearchService.searchNetworkPath(request);
+
+        // Then
+        assertThat(result).isEqualTo(NetworkPathSearchService.ResultCategory.SUCCESS.name());
+    }
+
+    @Test
+    public void searchNetworkPath_GivenDeniedSecurityOutcome_ThenReturnBlockedByFirewallResult() throws IOException, LatestSnapshotIdNotFoundException {
+        // Given
+        NetworkRequest request = new NetworkRequest();
+        when(authUtility.generateAuthorizationHeader()).thenReturn("authHeader");
+        when(snapshotService.getLatestNetworkSnapshot(any())).thenReturn("snapshotId");
+        when(restTemplate.exchange(any(), eq(HttpMethod.GET), any(), eq(String.class)))
+                .thenReturn(new ResponseEntity<>("{\"forwardingOutcome\":\"DELIVERED\",\"securityOutcome\":\"DENIED\"}", HttpStatus.OK));
+
+        // When
+        String result = pathSearchService.searchNetworkPath(request);
+
+        // Then
+        assertThat(result).isEqualTo(NetworkPathSearchService.ResultCategory.BLOCKED_BY_FIREWALL.name());
+    }
+
+    @Test
+    public void searchNetworkPath_GivenIncorrectForwardingOutcome_ThenReturnIncorrectPathResult() throws IOException, LatestSnapshotIdNotFoundException {
+        // Given
+        NetworkRequest request = new NetworkRequest();
+        when(authUtility.generateAuthorizationHeader()).thenReturn("authHeader");
+        when(snapshotService.getLatestNetworkSnapshot(any())).thenReturn("snapshotId");
+        when(restTemplate.exchange(any(), eq(HttpMethod.GET), any(), eq(String.class)))
+                .thenReturn(new ResponseEntity<>("{\"forwardingOutcome\":\"INCORRECT\",\"securityOutcome\":\"DENIED\"}", HttpStatus.OK));
+
+        // When
+        String result = pathSearchService.searchNetworkPath(request);
+
+        // Then
+        assertThat(result).isEqualTo(NetworkPathSearchService.ResultCategory.INCORRECT_PATH.name());
+    }
+
+    @Test
+    public void searchNetworkPath_GivenTimeout_ThenReturnMaxTimeoutResult() throws IOException, LatestSnapshotIdNotFoundException {
+        // Given
+        NetworkRequest request = new NetworkRequest();
+        when(authUtility.generateAuthorizationHeader()).thenReturn("authHeader");
+        when(snapshotService.getLatestNetworkSnapshot(any())).thenReturn("snapshotId");
+        when(restTemplate.exchange(any(), eq(HttpMethod.GET), any(), eq(String.class)))
+                .thenReturn(new ResponseEntity<>("{\"timeOut\":true}", HttpStatus.OK));
+
+        // When
+        String result = pathSearchService.searchNetworkPath(request);
+
+        // Then
+        assertThat(result).isEqualTo(NetworkPathSearchService.ResultCategory.MAX_TIMEOUT.name());
+    }
+
+    @Test
+    public void searchNetworkPath_GivenUnknownOutcome_ThenReturnUnknownResult() throws IOException, LatestSnapshotIdNotFoundException {
+        // Given
+        NetworkRequest request = new NetworkRequest();
+        when(authUtility.generateAuthorizationHeader()).thenReturn("authHeader");
+        when(snapshotService.getLatestNetworkSnapshot(any())).thenReturn("snapshotId");
+        when(restTemplate.exchange(any(), eq(HttpMethod.GET), any(), eq(String.class)))
+                .thenReturn(new ResponseEntity<>("{}", HttpStatus.OK));
+
+        // When
+        String result = pathSearchService.searchNetworkPath(request);
+
+        // Then
+        assertThat(result).isEqualTo(NetworkPathSearchService.ResultCategory.UNKNOWN.name());
+    }
+}
+
+These test cases cover different scenarios, including successful API calls, failed API calls, different security outcomes, timeout, and unknown outcomes. Adjust the test cases based on your specific requirements and error messages.
+
+===============================================================================================
+import org.junit.jupiter.api.Test;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+
+import java.io.IOException;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+
+public class NetworkSearchControllerTest {
+
+    @Mock
+    private NetworkPathSearchService networkPathSearchService;
+
+    @InjectMocks
+    private NetworkSearchController networkSearchController;
+
+    public NetworkSearchControllerTest() {
+        MockitoAnnotations.openMocks(this);
+    }
+
+    @Test
+    public void searchNetworkPath_GivenValidRequest_WhenServiceReturnsSuccess_ThenReturnOk() throws IOException, LatestSnapshotIdNotFoundException {
+        // Given
+        when(networkPathSearchService.searchNetworkPath(any())).thenReturn(NetworkPathSearchService.ResultCategory.SUCCESS.name());
+
+        // When
+        ResponseEntity<String> response = networkSearchController.searchNetworkPath("sourceIp", "destIp", 8080, "TCP");
+
+        // Then
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isEqualTo(NetworkPathSearchService.ResultCategory.SUCCESS.name());
+    }
+
+    @Test
+    public void searchNetworkPath_GivenIOException_ThenReturnInternalServerError() throws IOException, LatestSnapshotIdNotFoundException {
+        // Given
+        when(networkPathSearchService.searchNetworkPath(any())).thenThrow(new IOException("IO Exception"));
+
+        // When
+        ResponseEntity<String> response = networkSearchController.searchNetworkPath("sourceIp", "destIp", 8080, "TCP");
+
+        // Then
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(response.getBody()).isEqualTo("Error occurred while parsing json");
+    }
+
+    @Test
+    public void searchNetworkPath_GivenLatestSnapshotIdNotFoundException_ThenReturnInternalServerErrorWithMessage() throws IOException, LatestSnapshotIdNotFoundException {
+        // Given
+        when(networkPathSearchService.searchNetworkPath(any())).thenThrow(new LatestSnapshotIdNotFoundException("ID Not Found"));
+
+        // When
+        ResponseEntity<String> response = networkSearchController.searchNetworkPath("sourceIp", "destIp", 8080, "TCP");
+
+        // Then
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(response.getBody()).isEqualTo("ID Not Found");
+    }
+}
