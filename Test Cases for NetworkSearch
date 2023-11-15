@@ -497,3 +497,164 @@ public class NetworkRequestTest {
                 .verify();
     }
 }
+
+
+
+-------------------------------------LatestSnapshotServiceTest-------------------------------------------------------
+import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.client.RestTemplate;
+
+import java.io.IOException;
+import java.net.URI;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+public class LatestNetworkSnapshotServiceTest {
+
+    @Test
+    public void getLatestNetworkSnapshot_WithSnapshotIdInCache_ShouldReturnSnapshotId() throws IOException, LatestSnapshotIdNotFoundException {
+        // Given
+        LatestNetworkSnapshotService snapshotService = new LatestNetworkSnapshotService(mock(RestTemplate.class));
+        Map<LocalDateTime, String> snapshotCache = new HashMap<>();
+        snapshotCache.put(LocalDateTime.now(), "cachedSnapshotId");
+        ReflectionTestUtils.setField(snapshotService, "snapshotCache", snapshotCache);
+
+        // When
+        String result = snapshotService.getLatestNetworkSnapshot("dummyAuthorizationHeader");
+
+        // Then
+        assertThat(result).isEqualTo("cachedSnapshotId");
+    }
+
+    @Test
+    public void getLatestNetworkSnapshot_WithNoSnapshotIdInCache_ShouldInvokeApiAndReturnSnapshotId() throws IOException, LatestSnapshotIdNotFoundException {
+        // Given
+        RestTemplate restTemplateMock = mock(RestTemplate.class);
+        LatestNetworkSnapshotService snapshotService = new LatestNetworkSnapshotService(restTemplateMock);
+        ReflectionTestUtils.setField(snapshotService, "snapshotCache", new HashMap<>());
+
+        ResponseEntity<String> mockResponse = mock(ResponseEntity.class);
+        when(mockResponse.getBody()).thenReturn("{\"id\": \"newSnapshotId\"}");
+        when(restTemplateMock.exchange(any(URI.class), eq(HttpMethod.GET), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(mockResponse);
+
+        // When
+        String result = snapshotService.getLatestNetworkSnapshot("dummyAuthorizationHeader");
+
+        // Then
+        assertThat(result).isEqualTo("newSnapshotId");
+    }
+
+    @Test
+    public void getLatestNetworkSnapshot_ApiCallFails_ShouldThrowException() throws IOException {
+        // Given
+        RestTemplate restTemplateMock = mock(RestTemplate.class);
+        LatestNetworkSnapshotService snapshotService = new LatestNetworkSnapshotService(restTemplateMock);
+        ReflectionTestUtils.setField(snapshotService, "snapshotCache", new HashMap<>());
+
+        when(restTemplateMock.exchange(any(URI.class), eq(HttpMethod.GET), any(HttpEntity.class), eq(String.class)))
+                .thenThrow(IOException.class);
+
+        // When/Then
+        assertThatThrownBy(() -> snapshotService.getLatestNetworkSnapshot("dummyAuthorizationHeader"))
+                .isInstanceOf(LatestSnapshotIdNotFoundException.class)
+                .hasMessage("Latest Processed Snapshot Id not found.");
+    }
+
+    @Test
+    public void getLatestNetworkSnapshot_WithInvalidJsonResponse_ShouldThrowException() throws IOException {
+        // Given
+        RestTemplate restTemplateMock = mock(RestTemplate.class);
+        LatestNetworkSnapshotService snapshotService = new LatestNetworkSnapshotService(restTemplateMock);
+        ReflectionTestUtils.setField(snapshotService, "snapshotCache", new HashMap<>());
+
+        ResponseEntity<String> mockResponse = mock(ResponseEntity.class);
+        when(mockResponse.getBody()).thenReturn("invalidJsonResponse");
+        when(restTemplateMock.exchange(any(URI.class), eq(HttpMethod.GET), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(mockResponse);
+
+        // When/Then
+        assertThatThrownBy(() -> snapshotService.getLatestNetworkSnapshot("dummyAuthorizationHeader"))
+                .isInstanceOf(IOException.class);
+    }
+
+    @Test
+    public void getLatestNetworkSnapshot_WithSnapshotIdInCacheExpired_ShouldInvokeApiAndReturnSnapshotId() throws IOException, LatestSnapshotIdNotFoundException {
+        // Given
+        LatestNetworkSnapshotService snapshotService = new LatestNetworkSnapshotService(mock(RestTemplate.class));
+        Map<LocalDateTime, String> snapshotCache = new HashMap<>();
+        snapshotCache.put(LocalDateTime.now().minusHours(24), "expiredSnapshotId");
+        ReflectionTestUtils.setField(snapshotService, "snapshotCache", snapshotCache);
+
+        ResponseEntity<String> mockResponse = mock(ResponseEntity.class);
+        when(mockResponse.getBody()).thenReturn("{\"id\": \"newSnapshotId\"}");
+        when(snapshotService.invokeLatestProcessedSnapshotAPI(any(URI.class), anyString())).thenReturn("{}");
+
+        // When
+        String result = snapshotService.getLatestNetworkSnapshot("dummyAuthorizationHeader");
+
+        // Then
+        assertThat(result).isEqualTo("newSnapshotId");
+    }
+
+    // Additional test cases...
+}
+
+1. Testing Cache Expiry
+Verify that the cache expires correctly after the defined time.
+@Test
+public void getLatestNetworkSnapshot_CacheExpiration_ShouldReturnSnapshotId() throws IOException, LatestSnapshotIdNotFoundException {
+    LatestNetworkSnapshotService snapshotService = new LatestNetworkSnapshotService(mock(RestTemplate.class));
+    
+    // Set a cached snapshot that's just expired
+    Map<LocalDateTime, String> snapshotCache = new HashMap<>();
+    snapshotCache.put(LocalDateTime.now().minusHours(AppConstants.MAX_CACHE_TIME_HOURS).minusMinutes(1), "expiredSnapshotId");
+    ReflectionTestUtils.setField(snapshotService, "snapshotCache", snapshotCache);
+
+    // Invoke the method - should trigger an API call due to expired cache
+    ResponseEntity<String> mockResponse = mock(ResponseEntity.class);
+    when(mockResponse.getBody()).thenReturn("{\"id\": \"newSnapshotId\"}");
+    when(snapshotService.invokeLatestProcessedSnapshotAPI(any(URI.class), anyString())).thenReturn(mockResponse);
+
+    String result = snapshotService.getLatestNetworkSnapshot("dummyAuthorizationHeader");
+
+    // Assert that the API call was made and new snapshot ID is returned
+    assertThat(result).isEqualTo("newSnapshotId");
+}
+
+
+2. Testing Empty Cache Handling
+Ensure the correct behavior when the cache is empty.
+@Test
+public void getLatestNetworkSnapshot_EmptyCache_ShouldInvokeApiAndReturnSnapshotId() throws IOException, LatestSnapshotIdNotFoundException {
+    LatestNetworkSnapshotService snapshotService = new LatestNetworkSnapshotService(mock(RestTemplate.class));
+    
+    // Set an empty cache
+    ReflectionTestUtils.setField(snapshotService, "snapshotCache", new HashMap<>());
+
+    // Simulate API response with a snapshot ID
+    ResponseEntity<String> mockResponse = mock(ResponseEntity.class);
+    when(mockResponse.getBody()).thenReturn("{\"id\": \"newSnapshotId\"}");
+    when(snapshotService.invokeLatestProcessedSnapshotAPI(any(URI.class), anyString())).thenReturn(mockResponse);
+
+    String result = snapshotService.getLatestNetworkSnapshot("dummyAuthorizationHeader");
+
+    // Assert that the API call was made and new snapshot ID is returned
+    assertThat(result).isEqualTo("newSnapshotId");
+}
+
+
+================================================================================================
