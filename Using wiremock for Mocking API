@@ -1,0 +1,67 @@
+import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.client.WireMock;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.*;
+import org.springframework.retry.annotation.EnableRetry;
+import org.springframework.retry.annotation.Retryable;
+import org.springframework.web.client.RestTemplate;
+
+import static com.github.tomakehurst.wiremock.client.WireMock.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
+@EnableRetry
+public class NetworkPathSearchServiceTest {
+
+    private static WireMockServer wireMockServer;
+
+    @BeforeAll
+    public static void setup() {
+        wireMockServer = new WireMockServer(8080); // Choose a port
+        wireMockServer.start();
+    }
+
+    @AfterAll
+    public static void tearDown() {
+        wireMockServer.stop();
+    }
+
+    @Test
+    public void givenRetryableMethodWhenExceptionThrownThenRetryOccurs() {
+        // Given
+        RestTemplate restTemplate = new RestTemplate();
+        NetworkPathSearchService searchService = new NetworkPathSearchService(
+                new AuthorizationHeaderUtility(),
+                new LatestNetworkSnapshotService(restTemplate),
+                restTemplate
+        );
+
+        // Stubbing the WireMock server to return an error on the first call and success on retry
+        wireMockServer.stubFor(
+                get(urlEqualTo("/api/search"))
+                        .willReturn(aResponse().withStatus(500))
+                        .inScenario("RetryScenario")
+                        .whenScenarioStateIs(Scenario.STARTED)
+                        .willSetStateTo("Retry")
+        );
+
+        wireMockServer.stubFor(
+                get(urlEqualTo("/api/search"))
+                        .willReturn(aResponse().withStatus(200).withBody("Success"))
+                        .inScenario("RetryScenario")
+                        .whenScenarioStateIs("Retry")
+        );
+
+        // When
+        String result = searchService.searchNetworkPath(new NetworkRequest());
+
+        // Then
+        assertThat(result).isEqualTo("Success");
+        wireMockServer.verify(2, getRequestedFor(urlEqualTo("/api/search")));
+    }
+    
+    // Additional test cases...
+}
