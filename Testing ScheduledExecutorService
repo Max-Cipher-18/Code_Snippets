@@ -1,0 +1,54 @@
+import org.junit.jupiter.api.Test;
+import java.util.Map;
+import java.util.concurrent.*;
+
+import static org.awaitility.Awaitility.await;
+import static org.mockito.Mockito.*;
+
+class NetworkbotTestServiceTest {
+
+    @Test
+    void givenConnectivityDefinition_whenRun_thenScheduleApiCallWith5SecondsDelay() {
+        // Mock dependencies
+        ScheduledExecutorService mockScheduler = mock(ScheduledExecutorService.class);
+        NetworkbotTestService networkbotTestService = new NetworkbotTestService(mockScheduler);
+
+        // Test data - ConnectivityDefinition and Result
+        ConnectivityDefinition connectivityDefinition = new ConnectivityDefinition(/* provide valid data */);
+        Result result = new Result(/* provide valid data */);
+
+        // Map containing test data
+        Map<ConnectivityDefinition, Result> connectivityDefinitionResultMap = Map.of(connectivityDefinition, result);
+
+        // Define a CountDownLatch to wait for task completion
+        CountDownLatch latch = new CountDownLatch(1);
+
+        // When scheduler.schedule() is called, execute the runnable provided and count down the latch
+        doAnswer(invocation -> {
+            Runnable runnable = invocation.getArgument(0);
+            new Thread(() -> {
+                try {
+                    Thread.sleep(5000); // Simulating 5 seconds delay
+                    runnable.run(); // Execute the runnable
+                    latch.countDown(); // Notify completion
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }).start();
+            return null;
+        }).when(mockScheduler).schedule(any(Runnable.class), eq(5L), eq(TimeUnit.SECONDS));
+
+        // Call the run method
+        networkbotTestService.run(connectivityDefinitionResultMap);
+
+        // Wait for the latch to be counted down, indicating completion of the scheduled task
+        try {
+            latch.await(); // Wait for the countdown
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        // Verify that the method to update the map was called after 5 seconds
+        verify(mockScheduler, timeout(6000)).schedule(any(Runnable.class), eq(5L), eq(TimeUnit.SECONDS));
+    }
+}
