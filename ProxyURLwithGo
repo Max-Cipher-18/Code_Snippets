@@ -1,0 +1,54 @@
+package main
+
+import (
+    "fmt"
+    "golang.org/x/net/proxy"
+    "net/http"
+    "net/url"
+    "os"
+)
+
+func main() {
+    // Define the proxy address
+    proxyAddr := "socks5://proxy_host:proxy_port"
+
+    // Parse the proxy URL
+    proxyURL, err := url.Parse(proxyAddr)
+    if err != nil {
+        fmt.Println("Error parsing proxy URL:", err)
+        os.Exit(1)
+    }
+
+    // Create a dialer for the SOCKS5 proxy
+    dialer, err := proxy.FromURL(proxyURL, proxy.Direct)
+    if err != nil {
+        fmt.Println("Error creating proxy dialer:", err)
+        os.Exit(1)
+    }
+
+    // Create an HTTP client and set the dialer
+    transport := &http.Transport{
+        Dial: dialer.Dial,
+    }
+    client := &http.Client{
+        Transport: transport,
+    }
+
+    // Define the target URL
+    targetURL := "http://target_host"
+
+    // Perform the HTTP GET request
+    resp, err := client.Get(targetURL)
+    if err != nil {
+        fmt.Println("Error performing request:", err)
+        os.Exit(1)
+    }
+    defer resp.Body.Close()
+
+    // Check the status code
+    if resp.StatusCode == http.StatusOK {
+        fmt.Println("Successfully reached", targetURL, "through proxy")
+    } else {
+        fmt.Println("Failed to reach", targetURL, "Status code:", resp.StatusCode)
+    }
+}
